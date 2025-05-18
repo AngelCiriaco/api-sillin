@@ -31,8 +31,15 @@ def analizar():
         archivo = request.files['imagen']
         npimg = np.frombuffer(archivo.read(), np.uint8)
         imagen = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
         if imagen is None:
             return jsonify({"error": "No se pudo decodificar la imagen"}), 400
+
+        # 🔧 REDIMENSIONAR imagen si es demasiado grande
+        h, w = imagen.shape[:2]
+        if max(h, w) > 720:
+            factor = 720.0 / max(h, w)
+            imagen = cv2.resize(imagen, (int(w * factor), int(h * factor)))
 
         resultado = analizar_postura(imagen)
         if not resultado or not resultado.pose_landmarks:
@@ -72,6 +79,10 @@ def analizar():
 
     except Exception as e:
         return jsonify({"error": f"Error inesperado: {str(e)}"}), 500
+
+@app.route("/", methods=["GET"])
+def ping():
+    return "✅ API funcionando correctamente", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
