@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify
 import cv2
 import numpy as np
 import mediapipe as mp
+import logging
+
+# Configuración básica de logging
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 mp_pose = mp.solutions.pose
@@ -29,17 +33,21 @@ def analizar():
             return jsonify({"error": "El campo 'altura_ciclista' debe ser numérico"}), 400
 
         archivo = request.files['imagen']
+
+        # Validar tamaño de archivo (máx. 3MB)
+        if archivo.content_length is not None and archivo.content_length > 3 * 1024 * 1024:
+            return jsonify({"error": "La imagen es demasiado grande (máx. 3MB)"}), 400
+
         npimg = np.frombuffer(archivo.read(), np.uint8)
         imagen = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
-
         if imagen is None:
             return jsonify({"error": "No se pudo decodificar la imagen"}), 400
 
-        # 🔧 REDIMENSIONAR imagen si es demasiado grande
-        h, w = imagen.shape[:2]
-        if max(h, w) > 720:
-            factor = 720.0 / max(h, w)
-            imagen = cv2.resize(imagen, (int(w * factor), int(h * factor)))
+        # Reducir resolución si es muy grande
+        max_dim = 720
+        if imagen.shape[0] > max_dim or imagen.shape[1] > max_dim:
+            imagen = cv2.resize(imagen, (max_dim, max_dim))
+            logging.info("Imagen redimensionada a 720x720")
 
         resultado = analizar_postura(imagen)
         if not resultado or not resultado.pose_landmarks:
@@ -78,6 +86,7 @@ def analizar():
         }), 200
 
     except Exception as e:
+        logging.exception("Error inesperado en /analizar")
         return jsonify({"error": f"Error inesperado: {str(e)}"}), 500
 
 @app.route("/", methods=["GET"])
@@ -85,4 +94,4 @@ def ping():
     return "✅ API funcionando correctamente", 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
